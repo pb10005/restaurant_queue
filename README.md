@@ -38,6 +38,7 @@
 - 詳細な分析結果とグラフの生成
 - ゼロ除算防止のための安全な計算処理
 - 日本語フォントに対応したグラフ表示
+- シミュレーションパラメータを別ファイルに分離し、設定変更を容易に
 
 ## 必要なライブラリ
 
@@ -76,7 +77,15 @@ python restaurant_simulation.py
 
 ## カスタマイズ
 
-スクリプト内の以下のパラメータを変更することで、様々な条件でのシミュレーションが可能です:
+シミュレーションパラメータは `simulation_parameters.py` ファイルに分離されており、このファイルを編集することで様々な条件でのシミュレーションが可能です。メインのシミュレーションロジックを変更せずにパラメータだけを調整できるため、異なるシナリオを簡単にテストできます。
+
+### ファイル構成
+
+- `simulation_parameters.py`: シミュレーションの全パラメータを定義
+- `restaurant_simulation.py`: シミュレーションのメインロジックを実装
+- `example_scenarios.py`: 異なるシナリオでのシミュレーション実行例
+
+以下のパラメータを変更することで、様々な条件でのシミュレーションが可能です:
 
 ### レストラン設定
 
@@ -132,6 +141,17 @@ CUSTOMER_PARAMS = {
 }
 ```
 
+`mean_interval`はポアソン分布のパラメータで、顧客の平均到着間隔（分）を表します。この値は天候や待ち行列の長さによって動的に調整されます。実際の到着間隔は以下のように指数分布を用いて生成されます：
+
+```python
+# 次の顧客の到着間隔を計算
+weather_queue_product = max(EPSILON, weather_factor * queue_factor)
+mean_interval = params["mean_interval"] / weather_queue_product
+interval = random.expovariate(1.0 / mean_interval)
+```
+
+これは、ポアソン過程における到着間隔が指数分布に従うという性質を利用しています。
+
 ### 天候影響係数
 
 ```python
@@ -180,7 +200,7 @@ WEATHER_FACTORS = {
 
 - 営業時間中に材料の追加調達はできない
 - 席が空いたら直ちに待ち行列の先頭の客が着席する
-- 来客頻度は天候や待ち行列の長さによって変動する
+- 来客頻度はポアソン分布に従い、そのパラメータは天候や待ち行列の長さによって変動する
 - 顧客は一定時間以上待つと帰る
 - 各顧客グループのサイズは確率分布に従う
 
@@ -215,4 +235,14 @@ import japanize_matplotlib  # 日本語フォントのサポート
 # 材料コストを計算 - 初期在庫（購入した全材料）のコストを記録
 for ing in restaurant.ingredients.values():
     restaurant.metrics.record_cost(ing.initial_stock * ing.cost)
+```
+
+### 材料使用処理の改善
+
+顧客が注文した料理の材料が適切に消費されるように、注文処理時に材料使用のロジックを追加しました。これにより、材料の使用量と在庫が正確に追跡されます。
+
+```python
+# 注文した料理の材料を使用
+for item in customer.orders:
+    restaurant.reserve_ingredients(item)
 ```
